@@ -1,0 +1,74 @@
+# Fontes do curador — perfil segurança ofensiva / infosec.
+#
+# `max`        limita quantos itens por fonte entram por noite. Contém as
+#              fontes de alto volume: BleepingComputer e The Hacker News
+#              publicam 10-15 itens/dia cada e afogariam o digest.
+#              Sem `max`, vale o padrão de 25.
+# `prioridade` (1-10) só desempata DUPLICATAS. Quando três veículos cobrem a
+#              mesma CVE, fica o de maior prioridade e os outros somem do
+#              digest como "também em: ...". Não influencia a nota.
+
+prioridade_github: 7
+
+feeds:
+  # --- Notícia e jornalismo investigativo -------------------------------
+  - nome: Krebs on Security
+    url: https://krebsonsecurity.com/feed/
+    prioridade: 9
+  - nome: The Record
+    url: https://therecord.media/feed
+    prioridade: 6
+    max: 12
+  - nome: BleepingComputer
+    url: https://www.bleepingcomputer.com/feed/
+    prioridade: 6
+    max: 12
+  - nome: The Hacker News
+    url: https://feeds.feedburner.com/TheHackersNews
+    prioridade: 3
+    max: 10
+
+  # --- Pesquisa ofensiva e vulnerabilidade ------------------------------
+  - nome: PortSwigger Research
+    url: https://portswigger.net/research/rss
+    prioridade: 10
+  - nome: Google Project Zero
+    url: https://googleprojectzero.blogspot.com/feeds/posts/default
+    prioridade: 10
+  - nome: Zero Day Initiative
+    url: https://www.thezdi.com/blog?format=rss
+    prioridade: 9
+  - nome: watchTowr Labs
+    url: https://labs.watchtowr.com/rss/
+    prioridade: 9
+  - nome: Trail of Bits
+    url: https://blog.trailofbits.com/feed/
+    prioridade: 9
+  - nome: SpecterOps
+    url: https://posts.specterops.io/feed
+    prioridade: 9
+
+  # --- Operacional e análise diária -------------------------------------
+  - nome: SANS Internet Storm Center
+    url: https://isc.sans.edu/rssfeed_full.xml
+    prioridade: 8
+    max: 10
+  - nome: Schneier on Security
+    url: https://www.schneier.com/feed/atom/
+    prioridade: 7
+  - nome: Troy Hunt
+    url: https://www.troyhunt.com/rss/
+    prioridade: 7
+
+# Releases de ferramenta: vira Atom automaticamente.
+# Só coloque o que você realmente usa — release de ferramenta parada
+# é ruído garantido.
+github_releases:
+  - projectdiscovery/nuclei
+  - sqlmapproject/sqlmap
+  - ffuf/ffuf
+  - SpecterOps/BloodHound
+  - rapid7/metasploit-framework
+  - zaproxy/zaproxy
+  - carlospolop/PEASS-ng
+  - owasp-amass/amass

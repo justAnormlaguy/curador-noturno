@@ -1,0 +1,64 @@
+# ATENÇÃO — mudança de premissa em relação ao perfil genérico:
+# agora TODAS as fontes já são de segurança. Perguntar "isso é sobre
+# segurança?" não separa mais nada — 100% dos itens passariam.
+# Por isso o critério abaixo discrimina DENTRO do domínio: o que separa
+# um item bom de um ruim aqui é profundidade técnica e acionabilidade,
+# não o assunto.
+
+limiar_nota: 8          # nota mínima para virar resumo. Calibre com o eval.
+resumo_curto: "profissional de segurança ofensiva que faz pentest e mantém o próprio homelab"
+
+descricao: |
+  Leitor: trabalha com segurança da informação, com foco em segurança
+  ofensiva — pentest, análise de vulnerabilidade, bug bounty. Lê código,
+  reproduz PoC e testa em laboratório. Mantém um homelab próprio (Linux,
+  Docker, nginx, SSH, VPN) que também é alvo do que ele lê.
+  Ele NÃO é gestor: decisão de compra, orçamento e compliance não interessam.
+
+  ESCALA DE NOTAS (0 a 10) — esta é a régua completa:
+    0-3  ruído: ele passa o olho e pula
+    4-5  é do assunto dele, mas raso demais para valer o tempo
+    6-7  tem substância técnica, ele leria num dia calmo
+    8-10 ele para o que está fazendo para ler
+
+  Atenção: TODAS as fontes deste digest já são de segurança da informação.
+  Portanto "o item é sobre segurança?" NÃO diferencia nada — 100% seriam
+  aprovados. O que separa nota alta de nota baixa aqui é profundidade
+  técnica e acionabilidade, nunca o tema.
+
+  NOTA 8-10 — o que ele para para ler:
+  - Vulnerabilidade com análise técnica: causa raiz, PoC, cadeia de exploração
+  - Exploração ativa in-the-wild, 0-day, falha entrando no catálogo KEV
+  - Técnica ofensiva concreta: request smuggling, desserialização, bypass de
+    autenticação, escalada de privilégio, Active Directory/Kerberos,
+    evasão de EDR, ataque em nuvem, movimentação lateral
+  - Writeup de pentest ou bug bounty com metodologia reproduzível
+  - Análise de malware ou de TTP de grupo (ransomware, APT) com IOC
+    ou mapeamento MITRE ATT&CK
+  - Incidente grande que explique COMO o atacante entrou
+  - Ferramenta que ele usa ganhando capacidade nova de verdade
+    (nuclei, sqlmap, Burp, BloodHound, ffuf, metasploit, ZAP, amass)
+  - Falha em software que ele mesmo hospeda: nginx, OpenSSH, Docker,
+    Proxmox, VPN, roteador doméstico, Nextcloud
+
+  NOTA 0-3 — o que ele pula sem ler:
+  - Post de fornecedor vendendo produto ("nossa plataforma detecta...")
+  - Notícia de incidente SEM detalhe técnico ("empresa X sofreu ataque")
+  - Rodada de investimento, aquisição, contratação, resultado financeiro
+    de empresa de segurança
+  - Compliance, LGPD, GDPR, ISO 27001, NIS2, governança, seguro cibernético
+  - Conscientização de usuário, "10 dicas para criar senha forte", phishing
+    explicado para leigo
+  - Previsão, "tendências para o próximo ano", painel de opinião,
+    relatório patrocinado, pesquisa de mercado
+  - Nomeação de executivo, anúncio de evento, webinar, chamada de palestra
+  - CVE de produto enterprise de nicho que ele não usa e sem exploração ativa
+  - Reportagem de política/geopolítica cibernética sem componente técnico
+
+  CRITÉRIOS DE DESEMPATE (aplique sempre):
+  - Exploração ativa confirmada SOBE a nota, mesmo se o texto for curto
+  - Ter PoC, código, comando ou passo a passo reproduzível SOBE a nota
+  - Quando o mesmo fato aparece como "notícia" e como "análise técnica",
+    a análise vale mais
+  - Sem identificador de CVE, sem versão afetada e sem detalhe técnico,
+    quase sempre é 0-3

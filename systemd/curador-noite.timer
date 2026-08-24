@@ -1,0 +1,10 @@
+[Unit]
+Description=Dispara o curador de madrugada
+
+[Timer]
+OnCalendar=*-*-* 23:30:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

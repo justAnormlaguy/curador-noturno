@@ -1,3 +1,25 @@
-dados/
+# --- SEGREDOS: nunca versionar ---
 .env
+*.pem
+*.key
+id_*
+
+# --- estado local ---
+dados/
+*.db
+*.db-wal
+*.db-shm
+eval/.notas_cache.json
+
+# --- python ---
 __pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# --- editores e SO ---
+.vscode/
+.idea/
+*.swp
+.DS_Store

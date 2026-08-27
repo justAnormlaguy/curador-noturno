@@ -5,9 +5,9 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=admin
-WorkingDirectory=/home/admin/curador
-EnvironmentFile=/home/admin/curador/.env
+User=controlador
+WorkingDirectory=/home/controlador/curador
+EnvironmentFile=/home/controlador/curador/.env
 # Rota B do passo 3 (ambiente virtual):
 # ExecStart=/home/admin/curador/.venv/bin/python -m curador.cli noite
 # Rota A do passo 3 (pacotes do sistema): comente a linha acima e use esta

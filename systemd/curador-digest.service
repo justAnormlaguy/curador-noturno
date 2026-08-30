@@ -4,8 +4,8 @@ Description=Envia o digest matinal no Telegram
 [Service]
 Type=oneshot
 User=controlador
-WorkingDirectory=/home/controlador/curador
-EnvironmentFile=/home/controlador/curador/.env
+WorkingDirectory=/home/controlador/curador-norturno
+EnvironmentFile=/home/controlador/curador-noturno/.env
 # Rota B do passo 3 (ambiente virtual):
 # ExecStart=/home/admin/curador/.venv/bin/python -m curador.cli digest
 # Rota A do passo 3 (pacotes do sistema): comente a linha acima e use esta

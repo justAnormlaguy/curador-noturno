@@ -41,9 +41,9 @@ Responda apenas o JSON, com a nota e um motivo de no máximo 12 palavras."""
 
 SYSTEM_RESUMO = """Você resume itens técnicos para um digest matinal.
 Escreva EXATAMENTE 3 linhas curtas, em português, sem markdown, sem título:
-Fato: descreva objetivamente o que aconteceu.
-Técnica: qual vulnerabilidade, ferramenta ou método foi usado.
-Relevância: por que isso importa para {perfil_curto}.
+linha 1: o que aconteceu (fato, não adjetivo)
+linha 2: o detalhe técnico que importa
+linha 3: por que interessa a este leitor: {perfil_curto}
 Nunca invente número ou versão que não esteja no texto."""
 
 

@@ -68,6 +68,12 @@ def main():
                     system, texto, schema=workers.SCHEMA_TRIAGEM, max_tokens=80
                 )
                 nota = int(saida["nota"])
+            except llm.ErroCota as e:
+                # Sem cota: não grava -1 no cache, as notas que faltam são
+                # pedidas de novo na próxima rodada.
+                print(f"! {e} — rode de novo quando a cota renovar")
+                cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1))
+                sys.exit(1)
             except Exception as e:
                 print(f"! {ex['titulo'][:50]}: {e}")
                 nota = -1

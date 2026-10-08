@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Teste de fumaça: roda o pipeline inteiro com um modelo falso.
 
-Serve para validar coleta, idempotência, máquina de estados, retry e
-montagem do digest SEM esperar o FX. Rode sempre que mexer no código:
+Serve para validar coleta, idempotência, máquina de estados, retry,
+montagem do digest e o cliente do Gemini (HTTP simulado) SEM chave e sem
+internet. Rode sempre que mexer no código:
 
     python eval/teste_fumaca.py
 """
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -51,7 +53,92 @@ def modelo_falso(system, user, *, schema=None, max_tokens=300, temperatura=0.1):
     return "Aconteceu X.\nDetalhe tecnico Y.\nImporta porque Z.", 0.01
 
 
+class _RespostaFalsa:
+    def __init__(self, status, corpo):
+        self.status_code = status
+        self._corpo = corpo
+        self.text = json.dumps(corpo)
+
+    def json(self):
+        return self._corpo
+
+
+def testar_cliente_gemini(completar_real):
+    """Formato da requisição, parse da resposta e 429 de cota diária."""
+    import requests
+
+    post_real = requests.post
+    chamadas, respostas = [], []
+
+    def post_falso(url, json=None, timeout=None, headers=None):
+        chamadas.append({"url": url, "json": json, "headers": headers})
+        return respostas.pop(0)
+
+    chave_real, rpm_real = llm.API_KEY, llm.RPM
+    llm.API_KEY, llm.RPM = "chave-teste", 0
+    requests.post = post_falso
+    try:
+        # triagem: JSON com schema; partes de raciocínio são ignoradas
+        respostas.append(_RespostaFalsa(200, {"candidates": [{"content": {"parts": [
+            {"text": "pensando...", "thought": True},
+            {"text": '{"nota": 8, "motivo": "exploit publico"}'},
+        ]}}]}))
+        saida, _ = completar_real(
+            "sys", "user", schema=workers.SCHEMA_TRIAGEM, max_tokens=80)
+        assert saida == {"nota": 8, "motivo": "exploit publico"}, saida
+        c = chamadas[-1]
+        assert c["url"].endswith(f"/models/{llm.MODELO}:generateContent"), c["url"]
+        assert c["headers"]["x-goog-api-key"] == "chave-teste"
+        gc = c["json"]["generationConfig"]
+        assert gc["responseMimeType"] == "application/json"
+        assert gc["responseJsonSchema"] == workers.SCHEMA_TRIAGEM
+        assert c["json"]["systemInstruction"]["parts"][0]["text"] == "sys"
+
+        # resumo: texto puro
+        respostas.append(_RespostaFalsa(200, {"candidates": [{"content": {"parts": [
+            {"text": "Fato: a.\nTécnica: b.\nRelevância: c.\n"}]}}]}))
+        texto, _ = completar_real("sys", "user", max_tokens=220)
+        assert texto.splitlines()[0] == "Fato: a.", texto
+        assert "responseMimeType" not in chamadas[-1]["json"]["generationConfig"]
+
+        # 429 de cota diária → ErroCota, sem retentar
+        respostas.append(_RespostaFalsa(429, {"error": {
+            "message": "Quota exceeded for GenerateRequestsPerDayPerProjectPerModel"}}))
+        try:
+            completar_real("sys", "user")
+            raise AssertionError("esperava ErroCota")
+        except llm.ErroCota:
+            pass
+        assert not respostas
+    finally:
+        requests.post = post_real
+        llm.API_KEY, llm.RPM = chave_real, rpm_real
+    print("   cliente Gemini ok")
+
+
+def testar_cota_esgotada(tmp: Path, fontes: list, perfil: dict):
+    """Cota acaba no meio da triagem: para sem queimar tentativa e a fila
+    fica intacta para a noite seguinte."""
+    def modelo_sem_cota(*a, **k):
+        raise llm.ErroCota("cota diária do Gemini esgotada")
+
+    llm.completar = modelo_sem_cota
+    con = db.conectar(tmp / "teste_cota.db")
+    db.inicializar(con)
+    coletor.coletar(con, fontes)
+    t = workers.triar(con, perfil)
+    assert t["sem_cota"] and t["triados"] == 0 and t["falhas"] == 0, t
+    assert db.estatisticas(con).get("novo") == 6
+    assert con.execute(
+        "SELECT COUNT(*) FROM itens WHERE tentativas > 0").fetchone()[0] == 0, (
+        "cota esgotada não pode gastar tentativa do item"
+    )
+    llm.completar = modelo_falso
+    print("   cota esgotada ok")
+
+
 def main():
+    completar_real = llm.completar
     llm.completar = modelo_falso
     tmp = Path(tempfile.mkdtemp())
     (tmp / "feed.atom").write_text(FEED, encoding="utf-8")
@@ -119,6 +206,11 @@ def main():
     assert "diretamente útil para o que ele faz" not in prompt, (
         "rubrica genérica voltou a competir com a do perfil"
     )
+
+    print("\n-- cliente Gemini (HTTP simulado) --")
+    testar_cliente_gemini(completar_real)
+    print("-- cota esgotada --")
+    testar_cota_esgotada(tmp, fontes, perfil)
     print("\nTUDO OK ✓")
 
 

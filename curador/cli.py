@@ -2,10 +2,9 @@
 você pode rodar qualquer uma na mão para depurar sem refazer as outras."""
 
 import argparse
-import os
 import sys
 
-from . import coletor, db, dedup, digest, energia, llm, workers
+from . import coletor, db, dedup, digest, llm, workers
 
 
 def cmd_init(args):
@@ -44,16 +43,26 @@ def cmd_digest(args):
         print(digest.entregar(con))
 
 
-def cmd_acordar(args):
-    sys.exit(0 if energia.acordar() else 1)
-
-
-def cmd_dormir(args):
-    energia.dormir()
-
-
-def cmd_checar_ssh(args):
-    sys.exit(0 if energia.checar_ssh() else 1)
+def cmd_checar_api(args):
+    """Confere chave e modelo e faz uma chamada mínima de geração. Rode ANTES
+    de automatizar: chave errada só apareceria às 23h30, item a item."""
+    if not llm.configurado():
+        print("✗ GEMINI_API_KEY não definida (veja o .env)")
+        sys.exit(1)
+    if not llm.esta_vivo():
+        print(f"✗ chave ou modelo inválido: {llm.MODELO} em {llm.API_URL}")
+        sys.exit(1)
+    try:
+        saida, dur = llm.completar(
+            "Responda apenas o JSON.", 'Devolva {"ok": true}.',
+            schema={"type": "object", "properties": {"ok": {"type": "boolean"}},
+                    "required": ["ok"]},
+            max_tokens=20,
+        )
+    except llm.ErroLLM as e:
+        print(f"✗ chamada falhou: {e}")
+        sys.exit(1)
+    print(f"✓ {llm.MODELO} respondeu {saida} em {dur:.1f}s")
 
 
 def cmd_status(args):
@@ -73,18 +82,10 @@ def cmd_status(args):
 def cmd_noite(args):
     """O pipeline inteiro. É isso que o systemd chama às 23h30.
 
-    FX_GERENCIA_ENERGIA controla as duas etapas de energia:
-      sim (padrão) — WoL para acordar, SSH para desligar no fim
-      nao          — assume o FX já ligado (tomada manual, por exemplo)
-
-    Com 'nao' o pipeline não aborta por WoL falho nem desliga uma máquina que
-    você controla por fora. Ele ainda checa /health antes de gastar a noite,
-    porque falhar aqui em 5 segundos é melhor que falhar item a item por
-    timeout ao longo de uma hora.
+    Checa a API antes de gastar a noite: falhar aqui em 5 segundos é melhor
+    que falhar item a item ao longo de uma hora. Se a cota diária acabar no
+    meio, triagem/resumo param e o que sobrou fica na fila para amanhã.
     """
-    gerencia = os.environ.get("FX_GERENCIA_ENERGIA", "sim").strip().lower()
-    gerencia = gerencia not in ("nao", "não", "no", "0", "false")
-
     con = db.conectar(args.banco)
     db.inicializar(con)
 
@@ -92,42 +93,26 @@ def cmd_noite(args):
     coletor.coletar(con)
 
     if not db.ha_trabalho_pendente(con):
-        print("nada a processar; nada a fazer no FX.")
+        print("nada a processar; nenhuma chamada à API.")
         return
 
-    if gerencia:
-        print("== acordando FX ==")
-        if not energia.acordar():
-            print("abortando: FX indisponível. O estado fica na fila para amanhã.")
-            sys.exit(1)
-    else:
-        print("== energia manual: conferindo se o FX está de pé ==")
-        if not llm.esta_vivo():
-            print(
-                f"abortando: {llm.BASE_URL} não responde.\n"
-                "Ligue o FX (tomada) e rode 'curador noite' de novo — a fila "
-                "está preservada."
-            )
-            sys.exit(1)
-        print("FX respondendo.")
+    print("== conferindo a API do Gemini ==")
+    if not llm.esta_vivo():
+        print(
+            f"abortando: API do Gemini ({llm.MODELO}) não respondeu — confira "
+            "GEMINI_API_KEY e a rede. A fila fica preservada para amanhã."
+        )
+        sys.exit(1)
 
     perfil = workers.carregar_perfil()
-    try:
-        print("== triagem ==")
-        workers.triar(con, perfil, limite=args.limite)
-        # Sem modelo e antes do resumo: cada duplicata pega aqui é um resumo
-        # caro que o FX não precisa gerar.
-        print("== deduplicação ==")
-        dedup.deduplicar(con)
-        print("== resumo ==")
-        workers.resumir(con, perfil, limite=args.limite)
-    finally:
-        # Mesmo se o worker explodir, o FX não passa a noite ligado.
-        if gerencia and not args.manter_ligado:
-            print("== desligando FX ==")
-            energia.dormir()
-        elif not gerencia:
-            print("== energia manual: desligue o FX quando quiser ==")
+    print("== triagem ==")
+    workers.triar(con, perfil, limite=args.limite)
+    # Sem modelo e antes do resumo: cada duplicata pega aqui é um resumo
+    # que não gasta cota da API.
+    print("== deduplicação ==")
+    dedup.deduplicar(con)
+    print("== resumo ==")
+    workers.resumir(con, perfil, limite=args.limite)
 
     print("== status ==")
     cmd_status(args)
@@ -154,13 +139,10 @@ def main(argv=None):
     )
     d = add("digest", cmd_digest, "monta e envia o digest")
     d.add_argument("--seco", action="store_true", help="só imprime, não envia")
-    add("acordar", cmd_acordar, "Wake-on-LAN no FX")
-    add("dormir", cmd_dormir, "desliga o FX")
-    add("checar-ssh", cmd_checar_ssh, "testa o SSH para o FX sem desligar nada")
+    add("checar-api", cmd_checar_api, "testa a chave e o modelo do Gemini")
     add("status", cmd_status, "fila e tempos medidos")
     n = add("noite", cmd_noite, "pipeline completo da madrugada")
     n.add_argument("--limite", type=int, default=200)
-    n.add_argument("--manter-ligado", action="store_true")
 
     args = p.parse_args(argv)
     args.func(args)

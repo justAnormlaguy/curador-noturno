@@ -6,7 +6,7 @@ assunto. O hash de URL não pega isso porque as URLs são realmente diferentes.
 
 Este módulo NÃO usa modelo. É o caso do "isso precisa mesmo que o modelo
 *escreva* algo?" — a resposta é não, e por isso roda em milissegundos no i3
-com o FX desligado. Dois sinais bastam:
+sem chamar a API. Dois sinais bastam:
 
   1. CVE em comum — sinal forte e praticamente sem falso positivo no domínio
      de segurança. Dois textos que citam CVE-2026-4041 falam da mesma coisa.
@@ -15,7 +15,7 @@ com o FX desligado. Dois sinais bastam:
 
 O item canônico do grupo é o de maior (nota, prioridade da fonte, tamanho do
 texto). Os outros viram status 'duplicado' e NUNCA são resumidos — o que
-economiza tempo de FX, não só espaço no digest.
+economiza cota da API, não só espaço no digest.
 """
 
 import re
@@ -137,6 +137,6 @@ def deduplicar(con) -> dict:
         economia = duplicados
         print(
             f"  {duplicados} duplicatas em {grupos} grupos "
-            f"({economia} resumos de FX economizados)"
+            f"({economia} chamadas de resumo economizadas)"
         )
         return {"duplicados": duplicados, "grupos": grupos}

@@ -12,7 +12,7 @@ EnvironmentFile=/home/controlador/curador-noturno/.env
 # ExecStart=/home/admin/curador/.venv/bin/python -m curador.cli noite
 # Rota A do passo 3 (pacotes do sistema): comente a linha acima e use esta
 ExecStart=/usr/bin/python3 -m curador.cli noite
-# Se a noite inteira estourar 6h, algo está muito errado: mata e desliga o FX.
+# Se a noite inteira estourar 6h, algo está muito errado: o systemd mata o processo.
 TimeoutStartSec=6h
 Nice=10
 StandardOutput=journal

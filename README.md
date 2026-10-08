@@ -1,16 +1,15 @@
 # Curador Noturno — infosec
 
 Digest matinal no Telegram com notícia e pesquisa de segurança da informação,
-produzido de madrugada por um modelo local. O i3 coordena e nunca carrega
-modelo; o FX acorda por Wake-on-LAN, trabalha e desliga sozinho.
+produzido de madrugada por um modelo de linguagem. O i3 coordena tudo e nunca
+carrega modelo: a triagem e o resumo vão para a API gratuita do **Gemini**.
+Sem segundo servidor, sem Wake-on-LAN, sem SSH.
 
 ```
 23:30  i3: coleta 21 fontes                     segundos, sem modelo
-       i3: tem fila? -> WoL no FX
-00:00  FX: triagem   título + trecho -> nota 0-10      ~100 itens
-00:35  i3: dedup     mesma CVE / título parecido       sem modelo
-00:36  FX: resumo    só o que passou e não é cópia     ~15 itens
-01:00  i3: desliga o FX
+23:31  API: triagem  título + trecho -> nota 0-10      ~100 itens
+23:45  i3: dedup     mesma CVE / título parecido       sem modelo
+23:45  API: resumo   só o que passou e não é cópia     ~15 itens
 07:00  i3: monta o digest e envia no Telegram
 ```
 
@@ -23,19 +22,21 @@ caro, só roda no que sobreviveu. Corta ~70% do trabalho do modelo.
 BleepingComputer, no The Hacker News e no The Record — três URLs diferentes,
 três notas 9, três vagas do digest. O agrupamento usa CVE em comum e
 similaridade de título, roda em milissegundos no i3 e acontece *antes* do
-resumo, então cada duplicata pega é também um resumo que o FX não gera.
+resumo, então cada duplicata pega é também uma chamada de resumo que não
+gasta cota da API.
 
-**3. Saída travada por gramática.** O `llama-server` converte o JSON Schema em
-GBNF e o modelo fica impossibilitado de fugir do formato. É isso que faz um 3B
-entregar JSON válido em 100% das chamadas.
+**3. Saída travada por schema.** O JSON Schema da triagem vai como
+`responseJsonSchema` e a API devolve JSON que obedece a ele — nota inteira de
+0 a 10 e motivo curto, sem texto em volta para limpar.
 
 **4. Uma régua só.** A escala de notas vive inteira em `config/perfil.yaml`.
 O prompt em `workers.py` não define critério nenhum — ver "Falha 2" abaixo
 para entender por que isso importa mais do que parece.
 
 Tudo é retomável: estado em SQLite, `INSERT OR IGNORE` por hash de URL, retry
-com backoff e desistência após 3 tentativas. Se o FX travar às 2h, você roda o
-mesmo comando de manhã e ele continua de onde parou.
+com backoff e desistência após 3 tentativas. Se a API cair às 2h ou a cota
+diária acabar, os itens que faltam ficam na fila **sem gastar tentativa** e a
+noite seguinte continua de onde parou.
 
 ---
 
@@ -43,40 +44,39 @@ mesmo comando de manhã e ele continua de onde parou.
 
 ## Convenções — leia antes de copiar qualquer comando
 
-Duas máquinas, dois usuários, dois IPs. Confundi-los é o erro mais fácil de
-cometer aqui. Todo comando abaixo vem marcado com onde ele roda.
+Uma máquina e uma API. Todo comando abaixo roda no i3.
 
-| papel | IP | usuário | hostname | o que roda |
-|---|---|---|---|---|
-| **i3** — coordena, sempre ligado | `192.168.18.201` | `admin` | minecraft | o curador (este projeto) |
-| **FX** — músculo, acorda por WoL | `192.168.18.200` | `homeserver` | homeserver | só o llama-server |
+| papel | onde | usuário | o que roda |
+|---|---|---|---|
+| **i3** — coordena, sempre ligado | `192.168.18.201` | `admin` | o curador (este projeto) |
+| **Gemini** — triagem e resumo | `generativelanguage.googleapis.com` | — | `gemini-3.1-flash-lite` (plano gratuito) |
 
-Valores derivados que aparecem na configuração:
+Valores que aparecem na configuração:
 
 | variável | valor | de onde vem |
 |---|---|---|
-| `LLM_URL` | `http://192.168.18.200:8085` | IP do FX + porta do llama-server |
-| `FX_HOST` | `192.168.18.200` | IP do FX |
-| `FX_BROADCAST` | `192.168.18.255` | broadcast da rede /24 |
-| `FX_SSH_USER` | `homeserver` | usuário **do FX** |
-| `FX_MAC` | você anota no passo 2 | placa de rede do FX |
+| `GEMINI_API_KEY` | você cria no passo 1 | Google AI Studio |
+| `GEMINI_MODELO` | `gemini-3.1-flash-lite` | modelo com plano gratuito |
+| `GEMINI_RPM` | `10` | abaixo do limite por minuto do seu projeto |
+| `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID` | você anota no passo 2 | BotFather |
 
-**Os 25 arquivos deste projeto ficam todos no i3.** O FX recebe apenas o
-llama.cpp e o modelo — nada deste repositório.
+**Os arquivos deste projeto ficam todos no i3.** Ele precisa apenas de saída
+HTTPS para a internet.
 
-⚠️ Reserve os dois IPs no DHCP do roteador. Se o IP do FX mudar, o Wake-on-LAN
-para de funcionar sem nenhuma mensagem de erro: o pacote mágico é UDP e ninguém
-avisa que ele foi para o vazio.
+Sobre o plano gratuito: o Google pode usar o conteúdo enviado para melhorar os
+produtos dele. Aqui isso é aceitável — o que vai para a API são títulos e
+trechos de notícias públicas e o seu `perfil.yaml`. Não coloque nada sensível
+no perfil.
 
 ### Mapa de dependências
 
 Cada passo só funciona se o anterior estiver pronto. Os pontos onde isso
 morde:
 
-- o **MAC do FX** (passo 2) é necessário para escrever o `.env` (passo 6)
-- o **token do Telegram** (passo 4) também vai no `.env` (passo 6)
-- qualquer comando `curador ...` exige as dependências instaladas (passo 5)
-- o teste de Wake-on-LAN real (passo 8) exige o `.env` pronto (passo 6)
+- a **chave do Gemini** (passo 1) e o **token do Telegram** (passo 2) vão no
+  `.env` (passo 4)
+- qualquer comando `curador ...` exige as dependências instaladas (passo 3)
+- o teste da API real (passo 6) exige o `.env` pronto (passo 4)
 
 Por isso a coleta de valores vem antes da configuração, e não intercalada.
 
@@ -105,11 +105,11 @@ cd /home/admin && tar -xzf curador.tar.gz && cd curador
 ├── README.md
 ├── requirements.txt
 ├── schema.sql                 ← lido por db.py, precisa ficar na raiz
-├── .env.example               → vira .env no passo 6
+├── .env.example               → vira .env no passo 4
 ├── curador/                   ← o pacote Python
 │   ├── __init__.py            ← vazio, mas obrigatório
 │   ├── cli.py  db.py  coletor.py  llm.py
-│   └── workers.py  dedup.py  digest.py  energia.py
+│   └── workers.py  dedup.py  digest.py
 ├── config/
 │   ├── feeds.yaml             ← VOCÊ EDITA: as fontes
 │   └── perfil.yaml            ← VOCÊ EDITA: o critério de relevância
@@ -117,7 +117,7 @@ cd /home/admin && tar -xzf curador.tar.gz && cd curador
 │   ├── README.md  teste_fumaca.py  avaliar.py
 │   ├── auditoria.py
 │   └── exemplos.jsonl         ← VOCÊ EDITA com o tempo
-└── systemd/                   ← copiados para /etc/systemd/system no passo 11
+└── systemd/                   ← copiados para /etc/systemd/system no passo 9
 ```
 
 **Critério de saída:**
@@ -129,171 +129,36 @@ test -f schema.sql && test -f curador/__init__.py && test -f config/perfil.yaml 
 find . -type f | wc -l    # deve dar 25
 ```
 
-Se faltar um módulo do pacote, o erro só aparece como `ImportError` no passo 7,
+Se faltar um módulo do pacote, o erro só aparece como `ImportError` no passo 5,
 longe da causa. Confira agora.
 
 ---
 
-## Passo 1 — FX: subir o llama-server
+## Passo 1 — Gemini: criar a chave da API (gratuita)
 
-**Onde:** FX (`192.168.18.200`), como `homeserver`.
+**Onde:** qualquer lugar com navegador; a chave vai para o i3 no passo 4.
 
-```bash
-sudo apt install -y build-essential cmake git libcurl4-openssl-dev
-cd /home/homeserver
-git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
-cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
-```
+1. Entre em <https://aistudio.google.com/apikey> com uma conta Google.
+2. **Create API key** → escolha (ou crie) um projeto. Não precisa de cartão.
+3. Em **Rate limits**, anote o limite gratuito por minuto (RPM) e por dia
+   (RPD) do `gemini-3.1-flash-lite` no seu projeto — o Google muda esses
+   números com frequência.
 
-FX da série Bulldozer/Piledriver não tem AVX2 — não force flags de
-arquitetura, deixe o cmake detectar.
+Conta da noite: com `--limite 200` na triagem e ~15 resumos, são até ~215
+chamadas. Se o RPD do seu projeto for menor que isso, baixe o `--limite` do
+`noite` na unit do passo 9 — o que não couber fica na fila para a noite
+seguinte, sem perder nada.
 
-Modelo: **Qwen2.5 3B Instruct Q4_K_M** (~2 GB).
-
-```bash
-mkdir -p /home/homeserver/modelos && cd /home/homeserver/modelos
-curl -L -o qwen2.5-3b-instruct-q4_k_m.gguf \
-  https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf
-```
-
-Serviço permanente. Precisa subir no boot, porque quem liga o FX é o pacote
-mágico do WoL — não há ninguém para dar `start` depois:
-
-```ini
-# /etc/systemd/system/llama-server.service
-[Unit]
-Description=llama-server
-After=network-online.target
-
-[Service]
-User=homeserver
-ExecStart=/home/homeserver/llama.cpp/build/bin/llama-server \
-  -m /home/homeserver/modelos/qwen2.5-3b-instruct-q4_k_m.gguf \
-  --host 0.0.0.0 --port 8085 \
-  --ctx-size 4096 --threads 4 --parallel 1 --cont-batching
-Restart=always
-RestartSec=5
-StartLimitBurst=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
-`--host 0.0.0.0` é o que permite o i3 acessar; `127.0.0.1` só serviria
-localmente. `--threads`: no FX-8xxx, 8 "núcleos" são 4 módulos com FPU
-compartilhada — meça `4` e `8`, muitas vezes empatam e o 4 esquenta menos.
-
-`RestartSec=5` evita o laço de reinício: com erro de configuração, o
-`Restart=always` sozinho faz o systemd bloquear a unit em cinco tentativas
-("Start request repeated too quickly") e todo erro vira o mesmo diagnóstico
-confuso.
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now llama-server
-systemctl status llama-server --no-pager
-```
-
-**Critério de saída,** ainda no FX:
-
-```bash
-curl -s localhost:8085/health     # {"status":"ok"}
-```
-
-Se falhar: `journalctl -u llama-server -n 30 --no-pager`. `status=217/USER`
-significa que o `User=` não existe nessa máquina; depois de corrigir a unit,
-`sudo systemctl reset-failed llama-server` antes de tentar de novo.
-
-O acesso a partir do i3 é verificado no passo 8 — pode haver firewall no
-caminho, e é cedo demais para testar isso agora.
+**Critério de saída:** você tem a chave em mãos e sabe o RPM/RPD do projeto.
 
 ---
 
-## Passo 2 — FX: Wake-on-LAN, desligamento sem senha e o MAC
+## Passo 2 — Telegram: token e chat id
 
-**Onde:** FX (`192.168.18.200`), como `homeserver`.
-
-Primeiro, na BIOS: habilite "Power On By PCI-E" ou "Wake on LAN". Sem isso,
-nada abaixo funciona.
-
-```bash
-sudo apt install -y ethtool
-ip -br link                                # descubra a interface, ex. enp3s0
-sudo ethtool enp3s0 | grep Wake-on         # precisa terminar em "g"
-sudo ethtool -s enp3s0 wol g               # se estiver "d"
-```
-
-O `wol g` se perde no reboot. Torne permanente — troque o MAC pelo real:
-
-```ini
-# /etc/systemd/network/50-wol.link
-[Match]
-MACAddress=AA:BB:CC:DD:EE:FF
-
-[Link]
-WakeOnLan=magic
-```
-
-Se a sua rede é gerenciada pelo NetworkManager e não pelo systemd-networkd,
-esse arquivo é ignorado; nesse caso use
-`nmcli connection modify <conexão> 802-3-ethernet.wake-on-lan magic`.
-
-Autorize o desligamento remoto:
-
-```bash
-echo 'homeserver ALL=(ALL) NOPASSWD: /sbin/poweroff' | sudo tee /etc/sudoers.d/curador
-sudo visudo -c        # valida a sintaxe; sudoers quebrado tranca a máquina
-```
-
-**Critério de saída — anote estes dois valores, você vai precisar no passo 6:**
-
-```bash
-ip link show enp3s0 | awk '/ether/ {print "FX_MAC=" $2}'
-sudo ethtool enp3s0 | grep Wake-on        # confirme que é "g"
-```
-
----
-
-## Passo 3 — i3: chave SSH para o FX
-
-**Onde:** i3 (`192.168.18.201`), como `admin`.
-
-Gere como `admin`, que é o usuário que vai rodar o serviço no passo 11 — o
-systemd usa o `~/.ssh` **dele**.
-
-```bash
-ssh-keygen -t ed25519 -N '' -f ~/.ssh/id_curador
-ssh-copy-id -i ~/.ssh/id_curador.pub homeserver@192.168.18.200
-```
-
-Repare que o usuário troca de lado: a chave nasce em `admin` no i3 e é
-instalada na conta `homeserver` do FX. O nome do arquivo `.pub` precisa bater
-exatamente com o que o `ssh-keygen` criou.
-
-**Critério de saída.** Teste com ssh puro — o projeto ainda não está instalado.
-`BatchMode=yes` é o mesmo modo do código, então falha se pedir senha:
-
-```bash
-ssh -o BatchMode=yes -i ~/.ssh/id_curador -o IdentitiesOnly=yes \
-    homeserver@192.168.18.200 'echo funcionou'
-```
-
-Precisa imprimir `funcionou`. Enquanto não imprimir, não siga: o desligamento é
-a única parte do sistema que falha **cara** e em silêncio — o FX passaria a
-noite ligado e você descobriria pela conta de luz.
-
-Como a chave tem nome fora do padrão (`id_curador`, não `id_ed25519`), o ssh
-**não a usa automaticamente**. Guarde o caminho para o `FX_SSH_KEY` do passo 6:
-`/home/admin/.ssh/id_curador`.
-
----
-
-## Passo 4 — Telegram: token e chat id
-
-**Onde:** qualquer lugar com navegador; os valores vão para o i3 no passo 6.
+**Onde:** qualquer lugar com navegador; os valores vão para o i3 no passo 4.
 
 1. Fale com `@BotFather` no Telegram → `/newbot` → guarde o token.
-2. **Mande qualquer mensagem para o seu bot** — sem isso o passo 3 vem vazio.
+2. **Mande qualquer mensagem para o seu bot** — sem isso o item 3 vem vazio.
 3. Pegue o chat id:
 
 ```bash
@@ -305,7 +170,7 @@ curl -s "https://api.telegram.org/bot<SEU_TOKEN>/getUpdates" \
 
 ---
 
-## Passo 5 — i3: instalar as dependências
+## Passo 3 — i3: instalar as dependências
 
 **Onde:** i3 (`192.168.18.201`), como `admin`.
 
@@ -350,10 +215,10 @@ python3 -c "import feedparser, yaml, requests; print('deps ok')"
 
 ---
 
-## Passo 6 — i3: configuração e banco
+## Passo 4 — i3: configuração e banco
 
 **Onde:** i3 (`192.168.18.201`), como `admin`.
-**Precisa:** o MAC do passo 2 e o token do passo 4.
+**Precisa:** a chave do passo 1 e o token do passo 2.
 
 ```bash
 cd /home/admin/curador
@@ -364,22 +229,19 @@ nano .env
 O `.env` completo desta instalação:
 
 ```
-LLM_URL=http://192.168.18.200:8085
-LLM_MODELO=qwen2.5-3b-instruct-q4_k_m
-LLM_TIMEOUT=420
+GEMINI_API_KEY=...                   # do passo 1
+GEMINI_MODELO=gemini-3.1-flash-lite
+GEMINI_RPM=10
+GEMINI_PENSAMENTO=minimal
 
-FX_MAC=AA:BB:CC:DD:EE:FF            # o que você anotou no passo 2
-FX_HOST=192.168.18.200
-FX_BROADCAST=192.168.18.255
-FX_SSH_USER=homeserver
-FX_SSH_KEY=/home/admin/.ssh/id_curador
-
-TELEGRAM_TOKEN=...                   # do passo 4
+TELEGRAM_TOKEN=...                   # do passo 2
 TELEGRAM_CHAT_ID=...
 ```
 
-Repare que `FX_SSH_USER` é `homeserver` — o usuário **do FX**, não o seu.
-É o erro mais comum aqui.
+- `GEMINI_RPM` espaça as chamadas. Deixe abaixo do limite do seu projeto;
+  se o 429 aparecer com frequência no log, baixe.
+- `GEMINI_PENSAMENTO=minimal` deixa o raciocínio interno no mínimo: triagem e
+  resumo de 3 linhas não ganham nada com mais, e cada token pensado conta.
 
 Agora as fontes. `config/feeds.yaml` traz 13 feeds e 8 repositórios, com três
 campos por fonte:
@@ -390,7 +252,7 @@ campos por fonte:
 - `prioridade` (1-10) — **só desempata duplicatas**; não influencia a nota
 
 Tire o que você não usa, principalmente os repositórios: release de ferramenta
-que você não roda é ruído garantido e custa uma chamada de FX.
+que você não roda é ruído garantido e custa uma chamada à API.
 
 Crie o banco:
 
@@ -403,7 +265,7 @@ instalação nova não há mensagem de migração.
 
 ---
 
-## Passo 7 — i3: teste de fumaça, sem tocar no FX
+## Passo 5 — i3: teste de fumaça, sem chave nem internet
 
 **Onde:** i3. **Duração:** 1 segundo.
 
@@ -413,71 +275,38 @@ python3 eval/teste_fumaca.py
 ```
 
 Roda o pipeline inteiro com um modelo falso: coleta, idempotência, retry com
-backoff, deduplicação, teto do digest e fila. Valida a lógica sem gastar um
-minuto de FX.
+backoff, deduplicação, teto do digest e fila — e o cliente do Gemini com HTTP
+simulado: formato da requisição, leitura da resposta e parada por cota
+esgotada. Valida a lógica sem gastar nenhuma chamada.
 
 **Critério de saída:** termina com `TUDO OK ✓`. Se falhar aqui, é problema de
 instalação — não adianta seguir.
 
 ---
 
-## Passo 8 — i3: verificar a ligação com o FX
+## Passo 6 — i3: verificar a API do Gemini
 
-**Onde:** i3. **Precisa:** passos 1, 2, 3 e 6 completos.
-
-Este passo não existia nas versões anteriores deste documento e é onde a maior
-parte dos problemas de rede aparece. Quatro verificações, nesta ordem:
+**Onde:** i3. **Precisa:** passos 1 e 4 completos.
 
 ```bash
 cd /home/admin/curador
 set -a && source .env && set +a
+python3 -m curador.cli checar-api
 ```
 
-**1. O i3 alcança o llama-server?** No passo 1 você testou por `localhost`, o
-que não prova nada sobre a rede:
+Confere a chave e o modelo e faz uma chamada mínima com schema — o mesmo
+caminho da triagem. Deve terminar com
+`✓ gemini-3.1-flash-lite respondeu {'ok': True} em ...`.
 
-```bash
-curl -s http://192.168.18.200:8085/health     # {"status":"ok"}
-```
-
-Sem resposta, com o serviço rodando no FX: firewall. No FX,
-`sudo ufw allow from 192.168.18.201 to any port 8085`.
-
-**2. O SSH funciona pelo `.env`?**
-
-```bash
-python3 -m curador.cli checar-ssh
-```
-
-Diferente do teste do passo 3, este usa `FX_SSH_USER` e `FX_SSH_KEY` do
-arquivo — ou seja, valida a configuração, não só a chave.
-
-**3. O desligamento funciona?**
-
-```bash
-python3 -m curador.cli dormir
-sleep 30 && ping -c2 192.168.18.200      # não deve responder
-```
-
-**4. O Wake-on-LAN funciona?** Com o FX desligado do passo anterior:
-
-```bash
-python3 -m curador.cli acordar
-```
-
-Ele envia o pacote mágico e espera o `/health` responder — sem `sleep` fixo,
-porque o tempo de boot mais carga do modelo varia. Deve terminar com
-`FX pronto.`
-
-**Critério de saída:** as quatro passam. Só aqui você sabe que o ciclo
-liga-trabalha-desliga fecha. Se o WoL falhar, revise a BIOS e o `ethtool` do
-passo 2 — e confirme que o roteador entrega broadcast na `192.168.18.255`.
+**Critério de saída:** o `checar-api` passa. Se disser chave ou modelo
+inválido, confira a chave no AI Studio e o nome em `GEMINI_MODELO`; se der
+timeout, o i3 não tem saída HTTPS (proxy ou firewall).
 
 ---
 
-## Passo 9 — primeira noite, na mão
+## Passo 7 — primeira noite, na mão
 
-**Onde:** i3, com o FX ligado pelo passo 8.
+**Onde:** i3, com o `checar-api` do passo 6 passando.
 
 Rode uma etapa por vez e observe. Comece pequeno: `--limite 20` na triagem.
 
@@ -486,36 +315,34 @@ cd /home/admin/curador
 set -a && source .env && set +a
 
 python3 -m curador.cli coletar             # segundos, sem modelo
-python3 -m curador.cli triar --limite 20   # aqui o FX trabalha
+python3 -m curador.cli triar --limite 20   # aqui a API trabalha
 python3 -m curador.cli status              # tempo medido por chamada
 python3 -m curador.cli deduplicar          # instantâneo, sem modelo
 python3 -m curador.cli resumir --limite 5
 python3 -m curador.cli digest --seco       # imprime, não envia
-python3 -m curador.cli dormir
 ```
 
-`status` é o número que decide tudo: com ele você extrapola quantos itens
-cabem na madrugada. Esperado no FX com 3B Q4: **15–25 s por triagem** e
-**40–70 s por resumo**. 100 triagens + 15 resumos ≈ 1 h.
+`status` mostra o tempo medido por chamada. Na API, cada chamada leva
+**1–3 s**; o que manda no tempo total é o espaçamento do `GEMINI_RPM`
+(10 RPM = uma chamada a cada 6 s). 100 triagens + 15 resumos ≈ 12 min.
 
-Passou de 40 s por triagem? Reduza `--ctx-size` para 2048 na unit do FX e
-corte o trecho enviado em `_texto_triagem` (`curador/workers.py`).
+Muitos `429` no log? Baixe `GEMINI_RPM`. Itens parados com "cota diária
+esgotada"? Baixe o `--limite` ou aceite que o resto sai na noite seguinte.
 
 **Critério de saída:** o `digest --seco` imprime algo que você teria gostado de
-receber. Se vier cheio de marketing, é o passo 10 que resolve — não mexa nos
+receber. Se vier cheio de marketing, é o passo 8 que resolve — não mexa nos
 feeds ainda.
 
 ---
 
-## Passo 10 — calibrar o julgamento do modelo
+## Passo 8 — calibrar o julgamento do modelo
 
-**Onde:** i3, **com o FX ligado** (`python3 -m curador.cli acordar` antes).
+**Onde:** i3, com a chave no `.env` (30 chamadas, uma por exemplo).
 
 Todos os passos anteriores provam que a máquina funciona. Este é o único que
 mede se o **modelo** entendeu o seu critério.
 
 ```bash
-python3 -m curador.cli acordar
 python3 eval/avaliar.py
 ```
 
@@ -530,7 +357,6 @@ As notas ficam em cache, então testar limiares é instantâneo:
 ```bash
 python3 eval/avaliar.py --limiar 6
 python3 eval/avaliar.py --limiar 8
-python3 -m curador.cli dormir
 ```
 
 Ajuste `limiar_nota` em `config/perfil.yaml` para o corte com melhor revocação
@@ -543,12 +369,12 @@ impressão.
 
 ---
 
-## Passo 11 — automatizar
+## Passo 9 — automatizar
 
 **Onde:** i3, como `admin` com sudo.
 
 As units já vêm com `User=admin` e `/home/admin/curador`. **Se você usou a rota
-A do passo 5** (sem venv), comente a linha `ExecStart` do venv e descomente a
+A do passo 3** (sem venv), comente a linha `ExecStart` do venv e descomente a
 do `/usr/bin/python3` — as duas estão nos arquivos.
 
 ```bash
@@ -562,20 +388,22 @@ sudo systemctl enable --now curador-noite.timer curador-digest.timer
 systemctl list-timers 'curador-*'
 ```
 
-`noite` faz coleta → WoL → triagem → dedup → resumo → desliga, e o desligamento
-acontece **mesmo se o worker explodir** (o `finally` em `cmd_noite`). O digest
-é um timer separado de propósito: se a noite falhar, às 7h você recebe o que
-deu certo em vez de não receber nada.
+`noite` faz coleta → checagem da API → triagem → dedup → resumo. Se a API
+não responder, aborta em segundos com a fila intacta; se a cota acabar no
+meio, para a etapa e deixa o resto para a noite seguinte. O digest é um timer
+separado de propósito: se a noite falhar, às 7h você recebe o que deu certo
+em vez de não receber nada.
 
 **Critério de saída:** `list-timers` mostra os dois com próximo disparo. Na
-manhã seguinte, confira `journalctl -u curador-noite --since yesterday` e —
-principalmente — que o FX está desligado.
+manhã seguinte, confira `journalctl -u curador-noite --since yesterday` e
+procure por `cota` ou `429` — sinal de que `GEMINI_RPM` ou `--limite` precisam
+de ajuste.
 
 ---
 
-## Passo 12 — auditar depois de uma semana
+## Passo 10 — auditar depois de uma semana
 
-**Onde:** i3, FX pode estar desligado.
+**Onde:** i3. Não usa a API.
 
 ```bash
 cd /home/admin/curador
@@ -620,7 +448,7 @@ e por similaridade de título via Jaccard sobre palavras de conteúdo. Compara
 também com o que já foi entregue nos últimos 3 dias, então a notícia de ontem
 não volta hoje com outra roupa. O canônico é escolhido por
 `(nota, prioridade da fonte, tamanho do texto)`, e os demais viram status
-`duplicado` — **nunca resumidos**, o que economiza tempo de FX além de vaga.
+`duplicado` — **nunca resumidos**, o que economiza chamadas além de vaga.
 No digest, aparecem como "também em: ...".
 
 Não usa modelo. É o caso do "isso precisa mesmo que o modelo *escreva* algo?"
@@ -643,7 +471,7 @@ voltar.
 ## Falha 3 — itens resumidos morriam sem serem entregues
 
 **Sintoma:** 19 itens resumidos, 15 entregues. Quatro sumiram — incluindo um
-writeup de bug bounty e uma fuga de contêiner, ambos nota 9. O FX gastou tempo
+writeup de bug bounty e uma fuga de contêiner, ambos nota 9. O modelo gastou tempo
 gerando resumos que ninguém leu.
 
 **Causa:** ordenação só por nota. Como quase todo aprovado tira 9, o desempate
@@ -668,9 +496,10 @@ um coletor separado de ~20 linhas, se você quiser.
 
 # Quando estabilizar
 
-- **Cascata de verdade:** suba um segundo `llama-server` na porta 8086 com um
-  **Qwen2.5 0.5B** só para a triagem. Cai para ~4 s/item e o 3B fica só nos
-  resumos. Agora você tem o `avaliar.py` para provar que a qualidade não caiu.
+- **Cascata de modelos:** triagem no `gemini-3.1-flash-lite` e resumo num
+  modelo maior (variável própria para o resumo em `llm.py`). Confira antes se
+  o modelo maior tem cota gratuita suficiente para ~15 resumos por noite, e
+  use o `avaliar.py` para provar que valeu.
 - **Dedup semântica:** embeddings pegam a mesma história contada com palavras
   totalmente diferentes, que o Jaccard não alcança. Roda rápido na CPU e
   também não gera texto.
@@ -681,17 +510,17 @@ um coletor separado de ~20 linhas, se você quiser.
 
 | Sintoma | Causa provável |
 |---|---|
-| `acordar` sempre falha | `ethtool` mostra `Wake-on: d`, ou o roteador não repassa broadcast — use o broadcast da sua sub-rede em `FX_BROADCAST` |
-| FX acorda mas `/health` não responde | `llama-server` não está `enable`d, ou ainda carregando o modelo (aumente o timeout em `acordar`); confira também se a porta do `.env` bate com a da unit |
+| `GEMINI_API_KEY não definida` | faltou `set -a && source .env && set +a`, ou o `EnvironmentFile=` da unit aponta para outro lugar |
+| `checar-api` diz chave/modelo inválido | chave errada ou o nome do modelo mudou — confira no AI Studio |
+| `HTTP 429` frequente no log | baixe `GEMINI_RPM` no `.env` |
+| Itens parados com "cota diária esgotada" | RPD do projeto menor que o volume da noite: baixe `--limite` do `noite`; o resto sai na noite seguinte |
+| `HTTP 400` citando `thinkingConfig` | o modelo não aceita esse nível; deixe `GEMINI_PENSAMENTO=` vazio |
 | `status=217/USER` na unit | o `User=` não existe nessa máquina — `id USUARIO` para confirmar |
-| `Start request repeated too quickly` | rate limit do systemd após falhas seguidas: `systemctl reset-failed llama-server` |
 | `ensurepip is not available` | falta `python3.12-venv`; ou instale-o, ou use a rota A do passo 3 |
 | `python3.12-venv não tem candidato` | componente `universe` desligado: `sudo add-apt-repository universe && sudo apt update` |
 | `.venv/bin/python: No such file` | o venv não foi criado (veja acima) ou você está na rota A: use `python3` |
-| `ssh-copy-id: failed to open ID file` | o nome do arquivo não bate com o do `ssh-keygen`; aponte para o `.pub` |
-| FX amanhece ligado | `curador checar-ssh` — provavelmente a chave não é encontrada; defina `FX_SSH_KEY` |
 | Itens presos em `novo` | `SELECT erro, tentativas FROM itens WHERE status='erro'` |
-| JSON inválido na triagem | `response_format` não foi aceito: confirme que o llama.cpp é recente (`/props` responde) |
+| JSON inválido na triagem | resposta bloqueada ou cortada — o erro traz o `finishReason`; rode `checar-api` |
 | Digest vazio toda manhã | limiar alto demais; `eval/avaliar.py --limiar 5` |
 | Digest cheio de marketing | limiar baixo, ou perfil sem exclusões suficientes; olhe os casos difíceis no `avaliar.py` |
 | Assunto repetido no digest | `LIMIAR_SIMILARIDADE` em `dedup.py` está alto (hoje 0.45); a auditoria mostra os pares que escaparam |

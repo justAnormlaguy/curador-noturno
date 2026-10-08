@@ -65,9 +65,10 @@ def triar(con, perfil: dict, limite: int = 200) -> dict:
     limiar = int(perfil.get("limiar_nota", 6))
     system = SYSTEM_TRIAGEM.format(perfil=perfil["descricao"].strip())
     aprovados = 0
+    sem_cota = False
 
     with db.Execucao(con, "triar") as exec_:
-        while True:
+        while not sem_cota:
             lote = db.pegar_lote(con, "novo", limite=25)
             if not lote or exec_.processados >= limite:
                 break
@@ -88,20 +89,27 @@ def triar(con, perfil: dict, limite: int = 200) -> dict:
                         f"  [{nota:2d}] {item['titulo'][:60]:60s} {dur:5.1f}s"
                         f"{' ✓' if nota >= limiar else ''}"
                     )
+                except llm.ErroCota as e:
+                    # Não é falha do item: não gasta tentativa, a fila espera.
+                    print(f"  ! {e} — triagem para aqui, o resto fica na fila")
+                    sem_cota = True
+                    break
                 except Exception as e:
                     db.registrar_falha(con, item["id"], str(e))
                     db.registrar_chamada(con, item["id"], "triar", llm.MODELO, 0, False)
                     exec_.falhas += 1
                     print(f"  ! {item['titulo'][:50]}: {e}")
 
-    return {"triados": exec_.processados, "aprovados": aprovados, "falhas": exec_.falhas}
+    return {"triados": exec_.processados, "aprovados": aprovados,
+            "falhas": exec_.falhas, "sem_cota": sem_cota}
 
 
 def resumir(con, perfil: dict, limite: int = 40) -> dict:
     system = SYSTEM_RESUMO.format(perfil_curto=perfil.get("resumo_curto", ""))
+    sem_cota = False
 
     with db.Execucao(con, "resumir") as exec_:
-        while True:
+        while not sem_cota:
             lote = db.pegar_lote(con, "triado", limite=10)
             if not lote or exec_.processados >= limite:
                 break
@@ -119,10 +127,15 @@ def resumir(con, perfil: dict, limite: int = 40) -> dict:
                     db.registrar_chamada(con, item["id"], "resumir", llm.MODELO, dur, True)
                     exec_.processados += 1
                     print(f"  ✓ {item['titulo'][:60]:60s} {dur:5.1f}s")
+                except llm.ErroCota as e:
+                    print(f"  ! {e} — resumo para aqui, o resto fica na fila")
+                    sem_cota = True
+                    break
                 except Exception as e:
                     db.registrar_falha(con, item["id"], str(e))
                     db.registrar_chamada(con, item["id"], "resumir", llm.MODELO, 0, False)
                     exec_.falhas += 1
                     print(f"  ! {item['titulo'][:50]}: {e}")
 
-    return {"resumidos": exec_.processados, "falhas": exec_.falhas}
+    return {"resumidos": exec_.processados, "falhas": exec_.falhas,
+            "sem_cota": sem_cota}

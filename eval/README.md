@@ -3,7 +3,7 @@
 Três scripts com propósitos diferentes. Confundi-los é a maneira mais fácil
 de achar que o sistema está bom quando não está.
 
-| script | pergunta que responde | precisa do FX? |
+| script | pergunta que responde | precisa da API? |
 |---|---|---|
 | `teste_fumaca.py` | O código funciona? | não |
 | `avaliar.py` | O **modelo** julga bem? | sim |
@@ -11,9 +11,10 @@ de achar que o sistema está bom quando não está.
 
 ## teste_fumaca.py
 
-Roda o pipeline inteiro com um modelo falso em 1 segundo. Valida coleta,
-idempotência, retry com backoff, dedup, teto do digest e fila. Rode a cada
-alteração de código.
+Roda o pipeline inteiro com um modelo falso em 1 segundo, sem chave e sem
+internet. Valida coleta, idempotência, retry com backoff, dedup, teto do
+digest, fila, o formato das requisições ao Gemini (HTTP simulado) e a parada
+por cota esgotada. Rode a cada alteração de código.
 
 Ele também trava as três correções: se alguém devolver a rubrica genérica ao
 prompt, ou a dedup parar de agrupar, ou o excedente do digest voltar a sumir

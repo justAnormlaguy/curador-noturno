@@ -97,7 +97,7 @@ def checar_fontes_mudas(con, dias: int) -> None:
 
 
 def relatorio_por_fonte(con, limiar: int, dias: int) -> None:
-    """Quem gasta o FX sem entregar nada é candidato a sair do feeds.yaml."""
+    """Quem gasta cota da API sem entregar nada é candidato a sair do feeds.yaml."""
     secao("3. VOLUME E APROVAÇÃO POR FONTE")
 
     corte = (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
@@ -138,7 +138,7 @@ def relatorio_por_fonte(con, limiar: int, dias: int) -> None:
         f"{(total_a / total_c if total_c else 0):>6.0%}"
     )
     print(
-        "\nLeitura: 'nunca aprova' = custa FX toda noite e não entrega — tire do "
+        "\nLeitura: 'nunca aprova' = custa chamadas toda noite e não entrega — tire do "
         "feeds.yaml.\n'aprova quase tudo' = ou é uma fonte excelente, ou o "
         "limiar está frouxo para ela."
     )
@@ -162,7 +162,7 @@ def checar_duplicatas(con, limiar: int, dias: int) -> None:
     ).fetchone()["c"]
     print(
         f"✓ dedup agrupou {pegas} itens em {grupos_pegos} assuntos "
-        f"({pegas} resumos de FX economizados)"
+        f"({pegas} chamadas de resumo economizadas)"
     )
 
     # Escaparam: itens que chegaram ao digest e ainda assim se parecem.

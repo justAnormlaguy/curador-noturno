@@ -5,7 +5,7 @@ Três URLs distintas, três notas 9, três vagas do seu digest gastas no mesmo
 assunto. O hash de URL não pega isso porque as URLs são realmente diferentes.
 
 Este módulo NÃO usa modelo. É o caso do "isso precisa mesmo que o modelo
-*escreva* algo?" — a resposta é não, e por isso roda em milissegundos no i3
+*escreva* algo?" — a resposta é não, e por isso roda em milissegundos no servidor
 sem chamar a API. Dois sinais bastam:
 
   1. CVE em comum — sinal forte e praticamente sem falso positivo no domínio

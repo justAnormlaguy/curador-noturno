@@ -1,5 +1,5 @@
-"""Cliente da API do Gemini (Google AI Studio). O i3 nunca carrega modelo:
-ele só fala HTTPS com a API.
+"""Cliente da API do Gemini (Google AI Studio). O servidor nunca carrega
+modelo: ele só fala HTTPS com a API.
 
 Fala direto com a API REST via `requests` — sem SDK extra. O plano gratuito
 tem limite por minuto (RPM) e por dia (RPD): este módulo espaça as chamadas
@@ -170,8 +170,8 @@ def completar(
     temperatura: float = 0.1,
 ) -> tuple[str | dict, float]:
     """Uma chamada. Se `schema` vier, vai como `responseJsonSchema` e a API
-    devolve JSON que obedece ao schema — o equivalente à gramática GBNF que
-    o llama-server usava."""
+    devolve JSON que obedece ao schema — o modelo não consegue fugir do
+    formato."""
     config = {
         "temperature": temperatura,
         # folga para tokens de raciocínio, que contam no limite de saída

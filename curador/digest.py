@@ -1,4 +1,4 @@
-"""Etapa 4: montar o digest e entregar. Roda no i3 às 7h,
+"""Etapa 4: montar o digest e entregar. Roda no servidor às 7h,
 independente do processamento — se a noite falhou, o digest sai
 com o que deu certo em vez de não sair."""
 

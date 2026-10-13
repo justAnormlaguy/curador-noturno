@@ -5,12 +5,12 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=controlador
-WorkingDirectory=/home/controlador/curador-noturno
-EnvironmentFile=/home/controlador/curador-noturno/.env
-# Rota B do passo 3 (ambiente virtual):
-# ExecStart=/home/admin/curador/.venv/bin/python -m curador.cli noite
-# Rota A do passo 3 (pacotes do sistema): comente a linha acima e use esta
+User=SEU_USUARIO
+WorkingDirectory=/home/SEU_USUARIO/curador-noturno
+EnvironmentFile=/home/SEU_USUARIO/curador-noturno/.env
+# Rota B do passo 3 do README (ambiente virtual):
+# ExecStart=/home/SEU_USUARIO/curador-noturno/.venv/bin/python -m curador.cli noite
+# Rota A do passo 3 do README (pacotes do sistema), a padrão:
 ExecStart=/usr/bin/python3 -m curador.cli noite
 # Se a noite inteira estourar 6h, algo está muito errado: o systemd mata o processo.
 TimeoutStartSec=6h

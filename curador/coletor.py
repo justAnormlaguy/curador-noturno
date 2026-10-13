@@ -1,4 +1,4 @@
-"""Etapa 1: encher a fila. Roda no i3, não usa modelo nenhum,
+"""Etapa 1: encher a fila. Roda no servidor, não usa modelo nenhum,
 leva segundos. Pode rodar quantas vezes quiser: é idempotente."""
 
 import re

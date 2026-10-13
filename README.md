@@ -1,16 +1,17 @@
 # Curador Noturno — infosec
 
 Digest matinal no Telegram com notícia e pesquisa de segurança da informação,
-produzido de madrugada por um modelo de linguagem. O i3 coordena tudo e nunca
-carrega modelo: a triagem e o resumo vão para a API gratuita do **Gemini**.
-Sem segundo servidor, sem Wake-on-LAN, sem SSH.
+produzido de madrugada por um modelo de linguagem. Um servidor pequeno e
+sempre ligado coordena tudo e nunca carrega modelo: a triagem e o resumo vão
+para a API gratuita do **Gemini**. Qualquer máquina Linux com Python 3.10+ e
+saída para a internet serve.
 
 ```
-23:30  i3: coleta 21 fontes                     segundos, sem modelo
+23:30  local: coleta 21 fontes                  segundos, sem modelo
 23:31  API: triagem  título + trecho -> nota 0-10      ~100 itens
-23:45  i3: dedup     mesma CVE / título parecido       sem modelo
+23:45  local: dedup   mesma CVE / título parecido       sem modelo
 23:45  API: resumo   só o que passou e não é cópia     ~15 itens
-07:00  i3: monta o digest e envia no Telegram
+07:00  local: monta o digest e envia no Telegram
 ```
 
 ## As quatro decisões que carregam o projeto
@@ -21,7 +22,7 @@ caro, só roda no que sobreviveu. Corta ~70% do trabalho do modelo.
 **2. Dedup sem modelo, antes do resumo.** A mesma falha sai no
 BleepingComputer, no The Hacker News e no The Record — três URLs diferentes,
 três notas 9, três vagas do digest. O agrupamento usa CVE em comum e
-similaridade de título, roda em milissegundos no i3 e acontece *antes* do
+similaridade de título, roda em milissegundos no servidor e acontece *antes* do
 resumo, então cada duplicata pega é também uma chamada de resumo que não
 gasta cota da API.
 
@@ -44,12 +45,16 @@ noite seguinte continua de onde parou.
 
 ## Convenções — leia antes de copiar qualquer comando
 
-Uma máquina e uma API. Todo comando abaixo roda no i3.
+Uma máquina e uma API. Todo comando abaixo roda no servidor, com o seu
+usuário comum (o `sudo` só aparece no passo 9).
 
-| papel | onde | usuário | o que roda |
-|---|---|---|---|
-| **i3** — coordena, sempre ligado | `192.168.18.201` | `admin` | o curador (este projeto) |
-| **Gemini** — triagem e resumo | `generativelanguage.googleapis.com` | — | `gemini-3.1-flash-lite` (plano gratuito) |
+| papel | onde | o que roda |
+|---|---|---|
+| **Servidor** — coordena, sempre ligado | sua rede local | o curador (este projeto) |
+| **Gemini** — triagem e resumo | `generativelanguage.googleapis.com` | `gemini-3.1-flash-lite` (plano gratuito) |
+
+O projeto fica em `~/curador-noturno`. Se usar outro lugar, troque o caminho
+nos comandos abaixo.
 
 Valores que aparecem na configuração:
 
@@ -60,8 +65,8 @@ Valores que aparecem na configuração:
 | `GEMINI_RPM` | `10` | abaixo do limite por minuto do seu projeto |
 | `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID` | você anota no passo 2 | BotFather |
 
-**Os arquivos deste projeto ficam todos no i3.** Ele precisa apenas de saída
-HTTPS para a internet.
+**Os arquivos deste projeto ficam todos no servidor.** Ele precisa apenas de
+saída HTTPS para a internet — nenhuma porta aberta para dentro.
 
 Sobre o plano gratuito: o Google pode usar o conteúdo enviado para melhorar os
 produtos dele. Aqui isso é aceitável — o que vai para a API são títulos e
@@ -82,26 +87,23 @@ Por isso a coleta de valores vem antes da configuração, e não intercalada.
 
 ---
 
-## Passo 0 — i3: baixar e montar a estrutura
+## Passo 0 — baixar o projeto
 
-**Onde:** i3 (`192.168.18.201`), como `admin`.
+**Onde:** servidor.
+
+```bash
+cd ~ && git clone https://github.com/justAnormlaguy/curador-noturno.git
+cd ~/curador-noturno
+```
 
 A estrutura de pastas é obrigatória: o `db.py` localiza o `schema.sql` e a
 pasta `config/` subindo um nível a partir de onde ele mesmo está. Achatar tudo
 numa pasta só faz o `init` falhar com "no such file".
 
-```bash
-# do seu computador
-scp curador.tar.gz admin@192.168.18.201:/home/admin/
-
-# no i3
-cd /home/admin && tar -xzf curador.tar.gz && cd curador
-```
-
 Árvore resultante:
 
 ```
-/home/admin/curador/
+~/curador-noturno/
 ├── README.md
 ├── requirements.txt
 ├── schema.sql                 ← lido por db.py, precisa ficar na raiz
@@ -123,11 +125,13 @@ cd /home/admin && tar -xzf curador.tar.gz && cd curador
 **Critério de saída:**
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 test -f schema.sql && test -f curador/__init__.py && test -f config/perfil.yaml \
   && echo "estrutura ok" || echo "ESTRUTURA ERRADA"
-find . -type f | wc -l    # deve dar 25
 ```
+
+Para atualizar depois: `git pull --ff-only` na mesma pasta. O `.env` e o
+banco em `dados/` não são versionados, então o pull não mexe neles.
 
 Se faltar um módulo do pacote, o erro só aparece como `ImportError` no passo 5,
 longe da causa. Confira agora.
@@ -136,7 +140,7 @@ longe da causa. Confira agora.
 
 ## Passo 1 — Gemini: criar a chave da API (gratuita)
 
-**Onde:** qualquer lugar com navegador; a chave vai para o i3 no passo 4.
+**Onde:** qualquer lugar com navegador; a chave vai para o servidor no passo 4.
 
 1. Entre em <https://aistudio.google.com/apikey> com uma conta Google.
 2. **Create API key** → escolha (ou crie) um projeto. Não precisa de cartão.
@@ -155,7 +159,7 @@ seguinte, sem perder nada.
 
 ## Passo 2 — Telegram: token e chat id
 
-**Onde:** qualquer lugar com navegador; os valores vão para o i3 no passo 4.
+**Onde:** qualquer lugar com navegador; os valores vão para o servidor no passo 4.
 
 1. Fale com `@BotFather` no Telegram → `/newbot` → guarde o token.
 2. **Mande qualquer mensagem para o seu bot** — sem isso o item 3 vem vazio.
@@ -170,9 +174,9 @@ curl -s "https://api.telegram.org/bot<SEU_TOKEN>/getUpdates" \
 
 ---
 
-## Passo 3 — i3: instalar as dependências
+## Passo 3 — instalar as dependências
 
-**Onde:** i3 (`192.168.18.201`), como `admin`.
+**Onde:** servidor.
 
 São três: `feedparser`, `PyYAML` e `requests`. Escolha **uma** rota.
 
@@ -190,7 +194,7 @@ Nesta rota, **todo comando `python3 -m curador.cli ...` roda direto**.
 ### Rota B — ambiente virtual
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
@@ -209,19 +213,19 @@ comando abaixo troca `python3` por `.venv/bin/python`.
 **Critério de saída:**
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 python3 -c "import feedparser, yaml, requests; print('deps ok')"
 ```
 
 ---
 
-## Passo 4 — i3: configuração e banco
+## Passo 4 — configuração e banco
 
-**Onde:** i3 (`192.168.18.201`), como `admin`.
+**Onde:** servidor.
 **Precisa:** a chave do passo 1 e o token do passo 2.
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 cp .env.example .env && chmod 600 .env
 nano .env
 ```
@@ -265,12 +269,12 @@ instalação nova não há mensagem de migração.
 
 ---
 
-## Passo 5 — i3: teste de fumaça, sem chave nem internet
+## Passo 5 — teste de fumaça, sem chave nem internet
 
-**Onde:** i3. **Duração:** 1 segundo.
+**Onde:** servidor. **Duração:** 1 segundo.
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 python3 eval/teste_fumaca.py
 ```
 
@@ -284,12 +288,12 @@ instalação — não adianta seguir.
 
 ---
 
-## Passo 6 — i3: verificar a API do Gemini
+## Passo 6 — verificar a API do Gemini
 
-**Onde:** i3. **Precisa:** passos 1 e 4 completos.
+**Onde:** servidor. **Precisa:** passos 1 e 4 completos.
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 set -a && source .env && set +a
 python3 -m curador.cli checar-api
 ```
@@ -300,18 +304,18 @@ caminho da triagem. Deve terminar com
 
 **Critério de saída:** o `checar-api` passa. Se disser chave ou modelo
 inválido, confira a chave no AI Studio e o nome em `GEMINI_MODELO`; se der
-timeout, o i3 não tem saída HTTPS (proxy ou firewall).
+timeout, o servidor não tem saída HTTPS (proxy ou firewall).
 
 ---
 
 ## Passo 7 — primeira noite, na mão
 
-**Onde:** i3, com o `checar-api` do passo 6 passando.
+**Onde:** servidor, com o `checar-api` do passo 6 passando.
 
 Rode uma etapa por vez e observe. Comece pequeno: `--limite 20` na triagem.
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 set -a && source .env && set +a
 
 python3 -m curador.cli coletar             # segundos, sem modelo
@@ -337,7 +341,7 @@ feeds ainda.
 
 ## Passo 8 — calibrar o julgamento do modelo
 
-**Onde:** i3, com a chave no `.env` (30 chamadas, uma por exemplo).
+**Onde:** servidor, com a chave no `.env` (30 chamadas, uma por exemplo).
 
 Todos os passos anteriores provam que a máquina funciona. Este é o único que
 mede se o **modelo** entendeu o seu critério.
@@ -371,18 +375,21 @@ impressão.
 
 ## Passo 9 — automatizar
 
-**Onde:** i3, como `admin` com sudo.
+**Onde:** servidor, com sudo.
 
-As units já vêm com `User=admin` e `/home/admin/curador`. **Se você usou a rota
-A do passo 3** (sem venv), comente a linha `ExecStart` do venv e descomente a
-do `/usr/bin/python3` — as duas estão nos arquivos.
+As units vêm com o marcador `SEU_USUARIO` em `User=` e nos caminhos. O `sed`
+abaixo troca pelo seu usuário **na cópia** para `/etc/systemd/system` — os
+arquivos do clone ficam intactos, e o `git pull` continua funcionando. Elas
+já usam a rota A do passo 3 (`/usr/bin/python3`); **se você usou a rota B**
+(venv), edite as cópias em `/etc/systemd/system`: comente a linha `ExecStart`
+ativa e descomente a do `.venv`.
 
 ```bash
-cd /home/admin/curador
-nano systemd/curador-noite.service     # escolha o ExecStart
-nano systemd/curador-digest.service
-
-sudo cp systemd/*.service systemd/*.timer /etc/systemd/system/
+cd ~/curador-noturno
+for f in systemd/*.service; do
+  sed "s/SEU_USUARIO/$USER/g" "$f" | sudo tee "/etc/systemd/system/$(basename "$f")" >/dev/null
+done
+sudo cp systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now curador-noite.timer curador-digest.timer
 systemctl list-timers 'curador-*'
@@ -403,10 +410,10 @@ de ajuste.
 
 ## Passo 10 — auditar depois de uma semana
 
-**Onde:** i3. Não usa a API.
+**Onde:** servidor. Não usa a API.
 
 ```bash
-cd /home/admin/curador
+cd ~/curador-noturno
 python3 eval/auditoria.py --dias 7
 ```
 

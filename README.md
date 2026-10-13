@@ -531,3 +531,7 @@ um coletor separado de ~20 linhas, se você quiser.
 | Digest vazio toda manhã | limiar alto demais; `eval/avaliar.py --limiar 5` |
 | Digest cheio de marketing | limiar baixo, ou perfil sem exclusões suficientes; olhe os casos difíceis no `avaliar.py` |
 | Assunto repetido no digest | `LIMIAR_SIMILARIDADE` em `dedup.py` está alto (hoje 0.45); a auditoria mostra os pares que escaparam |
+
+# Licença
+
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
